@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#C00000">
+<title>Painel de Prospecção — Peças Piratruck</title>
+<style>
+  :root{ --vermelho:#C00000; --bg:#f1f5f9; --card:#fff; --linha:#e5e7eb; --txt:#0f172a; --mut:#64748b; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt)}
+  header{background:var(--vermelho);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:10}
+  header b{font-size:16px}header small{display:block;color:#ffd9d9;font-weight:400;font-size:12px}
+  .btn{border:none;border-radius:8px;padding:9px 13px;font-weight:700;font-size:14px;cursor:pointer}
+  .btn-v{background:var(--vermelho);color:#fff}.btn-c{background:#e2e8f0;color:#334155}.btn-sm{padding:6px 10px;font-size:13px}
+  .tabs{display:flex;gap:4px;background:#fff;border-bottom:1px solid var(--linha);padding:0 10px;position:sticky;top:52px;z-index:9;overflow-x:auto}
+  .tab{padding:11px 14px;cursor:pointer;font-weight:700;font-size:14px;color:var(--mut);border-bottom:3px solid transparent;white-space:nowrap}
+  .tab.on{color:var(--vermelho);border-bottom-color:var(--vermelho)}
+  .wrap{max-width:960px;margin:0 auto;padding:16px}
+  section{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:16px;margin-top:14px}
+  h2{margin:0 0 12px;font-size:16px}
+  label{display:block;font-size:12px;color:var(--mut);margin:8px 0 3px;font-weight:600}
+  input,select,textarea{width:100%;border:1px solid var(--linha);border-radius:8px;padding:9px;font-size:14px;font-family:inherit;background:#fff}
+  textarea{min-height:48px;resize:vertical}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  @media(max-width:640px){.row,.row3{grid-template-columns:1fr}}
+  .mut{color:var(--mut);font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--linha);vertical-align:top}
+  th{color:var(--mut);font-size:11px;text-transform:uppercase}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}@media(max-width:640px){.kpis{grid-template-columns:1fr 1fr}}
+  .kpi{background:#faf5f5;border:1px solid #f0dede;border-radius:10px;padding:12px}
+  .kpi b{display:block;font-size:22px;color:var(--vermelho)}.kpi span{font-size:11px;color:var(--mut)}
+  .del{color:var(--vermelho);cursor:pointer;background:none;border:none;font-size:16px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 16px;border-radius:8px;opacity:0;transition:.2s;z-index:50}.toast.on{opacity:1}
+  #ov{position:fixed;inset:0;background:rgba(120,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:100}
+  #ov .box{background:#fff;border-radius:14px;padding:24px;width:320px;max-width:92vw;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+  #ov h1{margin:0 0 4px;font-size:18px}#ov p{margin:0 0 14px;color:var(--mut);font-size:13px}
+  .atras{background:#fee2e2;color:#991b1b}.hoje{background:#dbeafe;color:#1e40af}
+</style></head>
+<body>
+<header>
+  <div><b>🔧 Prospecção de Peças</b><small>Piratruck · registro e resultado</small></div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <select id="curUser" onchange="setUser(this.value)" style="max-width:170px;font-weight:700;color:#0f172a"><option value="">— seu nome —</option></select>
+    <button class="btn btn-c btn-sm" onclick="addUser()">+</button>
+    <button class="btn btn-c btn-sm" onclick="logout()">Sair</button>
+  </div>
+</header>
+<div class="tabs">
+  <div class="tab on" data-t="reg" onclick="tab('reg')">📇 Registrar</div>
+  <div class="tab" data-t="cli" onclick="tab('cli')">👤 Clientes</div>
+  <div class="tab" data-t="prox" onclick="tab('prox')">📅 Próximos contatos</div>
+  <div class="tab" data-t="dir" onclick="tab('dir')">📊 Diretoria</div>
+</div>
+<div class="wrap">
+  <!-- REGISTRAR -->
+  <div id="tab-reg">
+    <section>
+      <h2>➕ Novo contato do dia</h2>
+      <div class="row3">
+        <div><label>Data</label><input type="date" id="cData"></div>
+        <div><label>Cliente</label><input id="cCli" placeholder="nome da empresa/pessoa"></div>
+        <div><label>CNPJ/CPF <span class="mut">(p/ cruzar venda)</span></label><input id="cDoc" placeholder="só números"></div>
+      </div>
+      <div class="row3">
+        <div><label>Meio de contato</label><select id="cMeio">
+          <option>WhatsApp</option><option>Telefone</option><option>Visita</option><option>E-mail</option><option>Balcão</option><option>Outro</option></select></div>
+        <div><label>Teve retorno?</label><select id="cRet"><option value="">—</option><option value="sim">Sim</option><option value="nao">Não</option></select></div>
+        <div><label>Situação</label><select id="cSit">
+          <option>Prospectado</option><option>Em conversa</option><option>Cotou</option><option>Comprou</option><option>Sem interesse</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>Próximo contato</label><input type="date" id="cProx"></div>
+        <div><label>Observação</label><input id="cObs" placeholder="o que rolou"></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn btn-v" onclick="addContato()">Salvar contato</button>
+        <span class="mut" id="regInfo" style="margin-left:10px"></span></div>
+    </section>
+    <section><h2>📋 Contatos de hoje</h2><div id="hojeList"></div></section>
+  </div>
+  <!-- CLIENTES -->
+  <div id="tab-cli" style="display:none">
+    <section>
+      <h2>👤 Clientes prospectados</h2>
+      <input id="busca" placeholder="🔎 buscar cliente, CNPJ ou vendedor..." oninput="renderCli()" style="margin-bottom:10px">
+      <div id="cliList"></div>
+    </section>
+  </div>
+  <!-- PROXIMOS -->
+  <div id="tab-prox" style="display:none">
+    <section><h2>📅 Próximos contatos (fila)</h2><div id="proxList"></div></section>
+  </div>
+  <!-- DIRETORIA -->
+  <div id="tab-dir" style="display:none">
+    <section>
+      <h2>📊 Visão da diretoria</h2>
+      <div class="kpis" id="kpis"></div>
+      <p class="mut" style="margin:14px 0 4px"><b>Desempenho por vendedor</b></p>
+      <div style="overflow-x:auto"><table id="tblVend"></table></div>
+      <p class="mut" style="margin:16px 0 4px"><b>⏱️ Do 1º contato até a 1ª compra</b> (quando o trabalho vira resultado)</p>
+      <div style="overflow-x:auto"><table id="tblConv"></table></div>
+      <p class="mut" style="margin-top:12px;font-size:12px">💡 Hoje a compra é marcada manualmente (situação "Comprou"). Com o export de vendas do ERP (CNPJ+data+valor), isso vira <b>automático</b>.</p>
+    </section>
+  </div>
+</div>
+<div id="ov"><div class="box"><div style="font-size:34px">🔧</div><h1>Prospecção de Peças</h1><p>Acesso privado — entre com seu login.</p>
+  <input id="lEmail" type="email" placeholder="E-mail" onkeydown="if(event.key==='Enter')doLogin()">
+  <div style="height:8px"></div>
+  <input id="lPass" type="password" placeholder="Senha" onkeydown="if(event.key==='Enter')doLogin()">
+  <div id="lMsg" style="display:none;color:#b91c1c;font-size:12px;margin:8px 0"></div>
+  <div style="height:12px"></div><button class="btn btn-v" style="width:100%" onclick="doLogin()">Entrar</button></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+var FB={apiKey:"AIzaSyCjrbTh9_yovb2CRtsXNL6fuOEyXnpFvcY",authDomain:"painel-veiculos-4a6f5.firebaseapp.com",projectId:"painel-veiculos-4a6f5",storageBucket:"painel-veiculos-4a6f5.firebasestorage.app",messagingSenderId:"910089422875",appId:"1:910089422875:web:fbca3bf5d3f2bdeea950be"};
+var COL="pecas_contatos",UCOL="pecas_vendedores";
+var SITCOR={"Prospectado":"#64748b","Em conversa":"#1e88e5","Cotou":"#b8860b","Comprou":"#15803d","Sem interesse":"#991b1b"};
+var db,auth,UID=null,C=[],USERS=[],CUR="";
+function fmt2(n){return(n<10?"0":"")+n}
+function hoje(){var d=new Date();return d.getFullYear()+"-"+fmt2(d.getMonth()+1)+"-"+fmt2(d.getDate())}
+function toast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("on");setTimeout(function(){t.classList.remove("on")},1700)}
+function esc(s){return(s==null?"":""+s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function br(d){return d?(""+d).split("-").reverse().join("/"):""}
+function chave(o){var c=(o.cnpj||"").replace(/\D/g,"");return c||("N:"+(o.cliente||"").toUpperCase().trim())}
+function pill(s){return '<span class="pill" style="background:'+((SITCOR[s]||"#64748b")+"22")+';color:'+(SITCOR[s]||"#64748b")+'">'+esc(s)+'</span>'}
+
+function doLogin(){var e=document.getElementById("lEmail").value.trim(),p=document.getElementById("lPass").value,m=document.getElementById("lMsg");m.style.display="none";
+  auth.signInWithEmailAndPassword(e,p).catch(function(err){m.textContent="E-mail ou senha incorretos ("+(err.code||"erro")+")";m.style.display="block"})}
+function logout(){auth.signOut()}
+function tab(t){["reg","cli","prox","dir"].forEach(function(x){document.getElementById("tab-"+x).style.display=x===t?"block":"none";});
+  document.querySelectorAll(".tab").forEach(function(e){e.classList.toggle("on",e.dataset.t===t)});
+  if(t==="cli")renderCli();if(t==="prox")renderProx();if(t==="dir")renderDir()}
+
+function start(){
+  db.collection(COL).onSnapshot(function(s){C=[];s.forEach(function(d){var o=d.data();o.__id=d.id;C.push(o)});renderAll()},function(e){console.warn(e.message)});
+  db.collection(UCOL).onSnapshot(function(s){USERS=[];s.forEach(function(d){var o=d.data();if(o&&o.nome)USERS.push(o.nome)});
+    C.forEach(function(o){if(o.vendedor&&USERS.indexOf(o.vendedor)<0)USERS.push(o.vendedor)});USERS.sort();fillUsers()})}
+function fillUsers(){var s=document.getElementById("curUser");s.innerHTML='<option value="">— seu nome —</option>'+USERS.map(function(n){return '<option>'+esc(n)+'</option>'}).join("");if(CUR)s.value=CUR}
+function addUser(){var n=(prompt("Nome do vendedor:")||"").trim();if(!n)return;if(USERS.indexOf(n)<0)db.collection(UCOL).doc(n.toLowerCase().replace(/[^a-z0-9]+/g,"-")).set({nome:n});setUser(n)}
+function setUser(n){CUR=n||"";try{localStorage.setItem("pecas_user",CUR)}catch(e){}var s=document.getElementById("curUser");if(s)s.value=CUR;
+  document.getElementById("regInfo").textContent=CUR?("lançando como "+CUR):"selecione seu nome no topo"}
+
+function addContato(){
+  if(!CUR)return alert("Selecione seu nome no topo.");
+  var cli=document.getElementById("cCli").value.trim();if(!cli)return alert("Informe o cliente.");
+  var o={vendedor:CUR,data:document.getElementById("cData").value||hoje(),cliente:cli,cnpj:document.getElementById("cDoc").value.trim(),
+    meio:document.getElementById("cMeio").value,retorno:document.getElementById("cRet").value,situacao:document.getElementById("cSit").value,
+    proximo:document.getElementById("cProx").value,obs:document.getElementById("cObs").value.trim(),criadoEm:Date.now()};
+  o.__id="ct-"+Date.now()+"-"+Math.floor(Math.random()*1000);
+  db.collection(COL).doc(o.__id).set(o).then(function(){toast("Contato salvo ✓")}).catch(function(e){alert("Erro: "+e.message)});
+  document.getElementById("cCli").value="";document.getElementById("cDoc").value="";document.getElementById("cObs").value="";document.getElementById("cProx").value="";
+}
+function excluir(id){if(!confirm("Excluir este registro?"))return;db.collection(COL).doc(id).delete().then(function(){toast("Excluído")})}
+
+function renderAll(){var t=document.querySelector(".tab.on");renderHoje();if(t){var k=t.dataset.t;if(k==="cli")renderCli();if(k==="prox")renderProx();if(k==="dir")renderDir()}}
+function linha(o){return '<tr><td>'+br(o.data)+'</td><td><b>'+esc(o.cliente)+'</b>'+(o.cnpj?'<br><span class="mut">'+esc(o.cnpj)+'</span>':'')+'</td><td>'+esc(o.vendedor)+'</td><td>'+esc(o.meio)+'</td><td>'+(o.retorno==="sim"?"✅":o.retorno==="nao"?"❌":"—")+'</td><td>'+pill(o.situacao)+'</td><td>'+(o.proximo?br(o.proximo):'—')+'</td><td>'+esc(o.obs||"")+'</td><td><button class="del" onclick="excluir(\''+o.__id+'\')">×</button></td></tr>'}
+function tabela(arr){return '<table><tr><th>Data</th><th>Cliente</th><th>Vendedor</th><th>Meio</th><th>Ret.</th><th>Situação</th><th>Próximo</th><th>Obs</th><th></th></tr>'+arr.map(linha).join("")+'</table>'}
+function renderHoje(){var h=hoje();var arr=C.filter(function(o){return o.data===h}).sort(function(a,b){return(b.criadoEm||0)-(a.criadoEm||0)});
+  document.getElementById("hojeList").innerHTML=arr.length?'<div style="overflow-x:auto">'+tabela(arr)+'</div>':'<p class="mut">Nenhum contato lançado hoje.</p>'}
+
+function renderCli(){
+  var q=(document.getElementById("busca").value||"").toLowerCase();
+  var grp={};C.forEach(function(o){var k=chave(o);(grp[k]=grp[k]||[]).push(o)});
+  var linhas=Object.keys(grp).map(function(k){var arr=grp[k].sort(function(a,b){return(a.data||"").localeCompare(b.data||"")});
+    var ult=arr[arr.length-1];var nome=ult.cliente,cnpj=ult.cnpj||"";var vend=[].concat.apply([],arr.map(function(x){return x.vendedor})).filter(function(v,i,s){return v&&s.indexOf(v)===i});
+    var comprou=arr.some(function(x){return x.situacao==="Comprou"});
+    return {nome:nome,cnpj:cnpj,vend:vend.join(", "),n:arr.length,sit:ult.situacao,prox:ult.proximo,comprou:comprou,
+      txt:(nome+" "+cnpj+" "+vend.join(" ")).toLowerCase()}})
+    .filter(function(x){return !q||x.txt.indexOf(q)>=0})
+    .sort(function(a,b){return b.n-a.n});
+  var html='<table><tr><th>Cliente</th><th>Vendedor(es)</th><th>Contatos</th><th>Situação</th><th>Próximo</th></tr>'+
+    linhas.map(function(x){return '<tr><td><b>'+esc(x.nome)+'</b>'+(x.cnpj?'<br><span class="mut">'+esc(x.cnpj)+'</span>':'')+(x.comprou?' 🏆':'')+'</td><td>'+esc(x.vend)+'</td><td>'+x.n+'</td><td>'+pill(x.sit)+'</td><td>'+(x.prox?br(x.prox):'—')+'</td></tr>'}).join("")+'</table>';
+  document.getElementById("cliList").innerHTML=linhas.length?'<div style="overflow-x:auto">'+html+'</div>':'<p class="mut">Nada encontrado.</p>'}
+
+function renderProx(){var h=hoje();
+  var arr=C.filter(function(o){return o.proximo&&o.situacao!=="Comprou"&&o.situacao!=="Sem interesse"}).sort(function(a,b){return(a.proximo||"").localeCompare(b.proximo||"")});
+  var seen={},uniq=[];arr.forEach(function(o){var k=chave(o);if(!seen[k]){seen[k]=1;uniq.push(o)}});
+  document.getElementById("proxList").innerHTML=uniq.length?'<div style="overflow-x:auto"><table><tr><th>Próximo</th><th>Cliente</th><th>Vendedor</th><th>Situação</th><th>Obs</th></tr>'+
+    uniq.map(function(o){var tag=o.proximo<h?'<span class="pill atras">atrasado</span>':o.proximo===h?'<span class="pill hoje">hoje</span>':'';
+      return '<tr><td>'+br(o.proximo)+' '+tag+'</td><td><b>'+esc(o.cliente)+'</b></td><td>'+esc(o.vendedor)+'</td><td>'+pill(o.situacao)+'</td><td>'+esc(o.obs||"")+'</td></tr>'}).join("")+'</table></div>':'<p class="mut">Nenhum próximo contato agendado.</p>'}
+
+function renderDir(){
+  var total=C.length,comRet=C.filter(function(o){return o.retorno==="sim"}).length;
+  var grpC={};C.forEach(function(o){var k=chave(o);(grpC[k]=grpC[k]||[]).push(o)});
+  var clientes=Object.keys(grpC).length;
+  var compraram=Object.keys(grpC).filter(function(k){return grpC[k].some(function(x){return x.situacao==="Comprou"})}).length;
+  var conv=clientes?Math.round(100*compraram/clientes):0;
+  document.getElementById("kpis").innerHTML=
+    '<div class="kpi"><b>'+total+'</b><span>contatos registrados</span></div>'+
+    '<div class="kpi"><b>'+clientes+'</b><span>clientes prospectados</span></div>'+
+    '<div class="kpi"><b>'+compraram+'</b><span>já compraram ('+conv+'%)</span></div>'+
+    '<div class="kpi"><b>'+(total?Math.round(100*comRet/total):0)+'%</b><span>contatos com retorno</span></div>';
+  // por vendedor
+  var v={};C.forEach(function(o){var n=o.vendedor||"—";var x=v[n]=v[n]||{ct:0,ret:0,cli:{},comp:{}};x.ct++;if(o.retorno==="sim")x.ret++;var k=chave(o);x.cli[k]=1;if(o.situacao==="Comprou")x.comp[k]=1});
+  var rows=Object.keys(v).sort(function(a,b){return v[b].ct-v[a].ct}).map(function(n){var x=v[n];var nc=Object.keys(x.cli).length,ncp=Object.keys(x.comp).length;
+    return '<tr><td><b>'+esc(n)+'</b></td><td>'+x.ct+'</td><td>'+Math.round(100*x.ret/x.ct)+'%</td><td>'+nc+'</td><td>'+ncp+'</td><td>'+(nc?Math.round(100*ncp/nc):0)+'%</td></tr>'});
+  document.getElementById("tblVend").innerHTML='<tr><th>Vendedor</th><th>Contatos</th><th>% retorno</th><th>Clientes</th><th>Compraram</th><th>Conversão</th></tr>'+rows.join("");
+  // tempo até 1a compra
+  var convRows=[];Object.keys(grpC).forEach(function(k){var arr=grpC[k];var comp=arr.filter(function(x){return x.situacao==="Comprou"});if(!comp.length)return;
+    var d1=arr.map(function(x){return x.data}).filter(Boolean).sort()[0];var dc=comp.map(function(x){return x.data}).filter(Boolean).sort()[0];
+    var dias=Math.round((new Date(dc)-new Date(d1))/86400000);var ult=arr[arr.length-1];
+    convRows.push({nome:ult.cliente,vend:ult.vendedor,d1:d1,dc:dc,dias:isNaN(dias)?"—":dias})});
+  convRows.sort(function(a,b){return(a.dc||"").localeCompare(b.dc||"")});
+  var med=convRows.filter(function(x){return typeof x.dias==="number"});med=med.length?Math.round(med.reduce(function(s,x){return s+x.dias},0)/med.length):null;
+  document.getElementById("tblConv").innerHTML='<tr><th>Cliente</th><th>Vendedor</th><th>1º contato</th><th>1ª compra</th><th>Dias</th></tr>'+
+    (convRows.length?convRows.map(function(x){return '<tr><td><b>'+esc(x.nome)+'</b></td><td>'+esc(x.vend)+'</td><td>'+br(x.d1)+'</td><td>'+br(x.dc)+'</td><td><b>'+x.dias+'</b></td></tr>'}).join("")+
+      '<tr><td colspan="4" style="text-align:right"><b>Tempo médio até a 1ª compra</b></td><td><b>'+(med!=null?med+" dias":"—")+'</b></td></tr>'
+     :'<tr><td colspan="5" class="mut">Nenhuma compra marcada ainda.</td></tr>')}
+
+window.addEventListener("load",function(){
+  document.getElementById("cData").value=hoje();
+  try{CUR=localStorage.getItem("pecas_user")||""}catch(e){}
+  firebase.initializeApp(FB);auth=firebase.auth();db=firebase.firestore();
+  auth.onAuthStateChanged(function(u){if(u){UID=u.uid;document.getElementById("ov").style.display="none";setUser(CUR);start()}else{document.getElementById("ov").style.display="flex"}})});
+</script>
+</body>
+</html>
