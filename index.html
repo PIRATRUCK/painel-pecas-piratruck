@@ -52,6 +52,8 @@
   <div class="tab on" data-t="reg" onclick="tab('reg')">📇 Registrar</div>
   <div class="tab" data-t="cli" onclick="tab('cli')">👤 Clientes</div>
   <div class="tab" data-t="prox" onclick="tab('prox')">📅 Próximos contatos</div>
+  <div class="tab" data-t="hist" onclick="tab('hist')">🕘 Histórico</div>
+  <div class="tab" data-t="vendas" onclick="tab('vendas')">💰 Vendas</div>
   <div class="tab" data-t="dir" onclick="tab('dir')">📊 Diretoria</div>
 </div>
 <div class="wrap">
@@ -92,6 +94,40 @@
   <div id="tab-prox" style="display:none">
     <section><h2>📅 Próximos contatos (fila)</h2><div id="proxList"></div></section>
   </div>
+  <!-- HISTORICO -->
+  <div id="tab-hist" style="display:none">
+    <section>
+      <h2>🕘 Histórico de atividade</h2>
+      <div class="row3">
+        <div><label>Vendedor</label><select id="hVend" onchange="renderHist()"><option value="">Todos</option></select></div>
+        <div><label>Período</label><select id="hPer" onchange="renderHist()">
+          <option value="dia">Hoje</option><option value="semana">Esta semana</option><option value="mes" selected>Este mês</option>
+          <option value="tudo">Tudo</option><option value="custom">Personalizado</option></select></div>
+        <div id="hCustom" style="display:none"><label>De / até</label>
+          <div style="display:flex;gap:6px"><input type="date" id="hDe" onchange="renderHist()"><input type="date" id="hAte" onchange="renderHist()"></div></div>
+      </div>
+      <div class="kpis" id="histKpis" style="margin-top:12px"></div>
+      <div id="histList" style="margin-top:12px"></div>
+    </section>
+  </div>
+  <!-- VENDAS -->
+  <div id="tab-vendas" style="display:none">
+    <section>
+      <h2>➕ Cadastrar venda</h2>
+      <div class="row3">
+        <div><label>Data da venda</label><input type="date" id="vData"></div>
+        <div><label>Cliente</label><input id="vCli" placeholder="nome"></div>
+        <div><label>CNPJ/CPF <span class="mut">(casa c/ prospecção)</span></label><input id="vDoc" placeholder="só números"></div>
+      </div>
+      <div class="row3">
+        <div><label>Valor (R$)</label><input id="vValor" inputmode="decimal" placeholder="0,00"></div>
+        <div><label>Vendedor</label><input id="vVend" placeholder="(seu nome)"></div>
+        <div><label>Produto / observação</label><input id="vObs" placeholder="ex.: kit freio, filtros..."></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn btn-v" onclick="addVenda()">Salvar venda</button></div>
+    </section>
+    <section><h2>💰 Vendas registradas</h2><div id="vList"></div></section>
+  </div>
   <!-- DIRETORIA -->
   <div id="tab-dir" style="display:none">
     <section>
@@ -101,7 +137,7 @@
       <div style="overflow-x:auto"><table id="tblVend"></table></div>
       <p class="mut" style="margin:16px 0 4px"><b>⏱️ Do 1º contato até a 1ª compra</b> (quando o trabalho vira resultado)</p>
       <div style="overflow-x:auto"><table id="tblConv"></table></div>
-      <p class="mut" style="margin-top:12px;font-size:12px">💡 Hoje a compra é marcada manualmente (situação "Comprou"). Com o export de vendas do ERP (CNPJ+data+valor), isso vira <b>automático</b>.</p>
+      <p class="mut" style="margin-top:12px;font-size:12px">💡 A conversão cruza <b>automaticamente</b> a aba <b>Vendas</b> com os prospectados por <b>CNPJ</b> (venda após o 1º contato) — ou pela situação "Comprou". Com o export de vendas do ERP dá pra alimentar as vendas em massa.</p>
     </section>
   </div>
 </div>
@@ -118,9 +154,15 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
 var FB={apiKey:"AIzaSyCjrbTh9_yovb2CRtsXNL6fuOEyXnpFvcY",authDomain:"painel-veiculos-4a6f5.firebaseapp.com",projectId:"painel-veiculos-4a6f5",storageBucket:"painel-veiculos-4a6f5.firebasestorage.app",messagingSenderId:"910089422875",appId:"1:910089422875:web:fbca3bf5d3f2bdeea950be"};
-var COL="pecas_contatos",UCOL="pecas_vendedores";
+var COL="pecas_contatos",UCOL="pecas_vendedores",VCOL="pecas_vendas";
 var SITCOR={"Prospectado":"#64748b","Em conversa":"#1e88e5","Cotou":"#b8860b","Comprou":"#15803d","Sem interesse":"#991b1b"};
-var db,auth,UID=null,C=[],USERS=[],CUR="";
+var db,auth,UID=null,C=[],USERS=[],V=[],CUR="";
+function docdig(s){return(""+(s==null?"":s)).replace(/\D/g,"")}
+function moeda(n){return "R$ "+(Number(n)||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+function parseVal(s){s=(""+(s==null?"":s)).replace(/\./g,"").replace(",",".").replace(/[^0-9.]/g,"");var n=parseFloat(s);return isNaN(n)?0:n}
+/* período helpers */
+function inicioSemana(){var d=new Date();var dw=(d.getDay()+6)%7;d.setDate(d.getDate()-dw);return d.getFullYear()+"-"+fmt2(d.getMonth()+1)+"-"+fmt2(d.getDate())}
+function inicioMes(){var d=new Date();return d.getFullYear()+"-"+fmt2(d.getMonth()+1)+"-01"}
 function fmt2(n){return(n<10?"0":"")+n}
 function hoje(){var d=new Date();return d.getFullYear()+"-"+fmt2(d.getMonth()+1)+"-"+fmt2(d.getDate())}
 function toast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("on");setTimeout(function(){t.classList.remove("on")},1700)}
@@ -132,18 +174,21 @@ function pill(s){return '<span class="pill" style="background:'+((SITCOR[s]||"#6
 function doLogin(){var e=document.getElementById("lEmail").value.trim(),p=document.getElementById("lPass").value,m=document.getElementById("lMsg");m.style.display="none";
   auth.signInWithEmailAndPassword(e,p).catch(function(err){m.textContent="E-mail ou senha incorretos ("+(err.code||"erro")+")";m.style.display="block"})}
 function logout(){auth.signOut()}
-function tab(t){["reg","cli","prox","dir"].forEach(function(x){document.getElementById("tab-"+x).style.display=x===t?"block":"none";});
+function tab(t){["reg","cli","prox","hist","vendas","dir"].forEach(function(x){document.getElementById("tab-"+x).style.display=x===t?"block":"none";});
   document.querySelectorAll(".tab").forEach(function(e){e.classList.toggle("on",e.dataset.t===t)});
-  if(t==="cli")renderCli();if(t==="prox")renderProx();if(t==="dir")renderDir()}
+  if(t==="cli")renderCli();if(t==="prox")renderProx();if(t==="hist")renderHist();if(t==="vendas")renderVendas();if(t==="dir")renderDir()}
 
 function start(){
   db.collection(COL).onSnapshot(function(s){C=[];s.forEach(function(d){var o=d.data();o.__id=d.id;C.push(o)});renderAll()},function(e){console.warn(e.message)});
+  db.collection(VCOL).onSnapshot(function(s){V=[];s.forEach(function(d){var o=d.data();o.__id=d.id;V.push(o)});renderAll()},function(e){console.warn(e.message)});
   db.collection(UCOL).onSnapshot(function(s){USERS=[];s.forEach(function(d){var o=d.data();if(o&&o.nome)USERS.push(o.nome)});
     C.forEach(function(o){if(o.vendedor&&USERS.indexOf(o.vendedor)<0)USERS.push(o.vendedor)});USERS.sort();fillUsers()})}
-function fillUsers(){var s=document.getElementById("curUser");s.innerHTML='<option value="">— seu nome —</option>'+USERS.map(function(n){return '<option>'+esc(n)+'</option>'}).join("");if(CUR)s.value=CUR}
+function fillUsers(){var s=document.getElementById("curUser");s.innerHTML='<option value="">— seu nome —</option>'+USERS.map(function(n){return '<option>'+esc(n)+'</option>'}).join("");if(CUR)s.value=CUR;
+  var h=document.getElementById("hVend");if(h){var cur=h.value;h.innerHTML='<option value="">Todos</option>'+USERS.map(function(n){return '<option>'+esc(n)+'</option>'}).join("");h.value=cur}}
 function addUser(){var n=(prompt("Nome do vendedor:")||"").trim();if(!n)return;if(USERS.indexOf(n)<0)db.collection(UCOL).doc(n.toLowerCase().replace(/[^a-z0-9]+/g,"-")).set({nome:n});setUser(n)}
 function setUser(n){CUR=n||"";try{localStorage.setItem("pecas_user",CUR)}catch(e){}var s=document.getElementById("curUser");if(s)s.value=CUR;
-  document.getElementById("regInfo").textContent=CUR?("lançando como "+CUR):"selecione seu nome no topo"}
+  document.getElementById("regInfo").textContent=CUR?("lançando como "+CUR):"selecione seu nome no topo";
+  var vv=document.getElementById("vVend");if(vv&&!vv.value)vv.value=CUR}
 
 function addContato(){
   if(!CUR)return alert("Selecione seu nome no topo.");
@@ -157,7 +202,7 @@ function addContato(){
 }
 function excluir(id){if(!confirm("Excluir este registro?"))return;db.collection(COL).doc(id).delete().then(function(){toast("Excluído")})}
 
-function renderAll(){var t=document.querySelector(".tab.on");renderHoje();if(t){var k=t.dataset.t;if(k==="cli")renderCli();if(k==="prox")renderProx();if(k==="dir")renderDir()}}
+function renderAll(){var t=document.querySelector(".tab.on");renderHoje();if(t){var k=t.dataset.t;if(k==="cli")renderCli();if(k==="prox")renderProx();if(k==="hist")renderHist();if(k==="vendas")renderVendas();if(k==="dir")renderDir()}}
 function linha(o){return '<tr><td>'+br(o.data)+'</td><td><b>'+esc(o.cliente)+'</b>'+(o.cnpj?'<br><span class="mut">'+esc(o.cnpj)+'</span>':'')+'</td><td>'+esc(o.vendedor)+'</td><td>'+esc(o.meio)+'</td><td>'+(o.retorno==="sim"?"✅":o.retorno==="nao"?"❌":"—")+'</td><td>'+pill(o.situacao)+'</td><td>'+(o.proximo?br(o.proximo):'—')+'</td><td>'+esc(o.obs||"")+'</td><td><button class="del" onclick="excluir(\''+o.__id+'\')">×</button></td></tr>'}
 function tabela(arr){return '<table><tr><th>Data</th><th>Cliente</th><th>Vendedor</th><th>Meio</th><th>Ret.</th><th>Situação</th><th>Próximo</th><th>Obs</th><th></th></tr>'+arr.map(linha).join("")+'</table>'}
 function renderHoje(){var h=hoje();var arr=C.filter(function(o){return o.data===h}).sort(function(a,b){return(b.criadoEm||0)-(a.criadoEm||0)});
@@ -184,36 +229,83 @@ function renderProx(){var h=hoje();
     uniq.map(function(o){var tag=o.proximo<h?'<span class="pill atras">atrasado</span>':o.proximo===h?'<span class="pill hoje">hoje</span>':'';
       return '<tr><td>'+br(o.proximo)+' '+tag+'</td><td><b>'+esc(o.cliente)+'</b></td><td>'+esc(o.vendedor)+'</td><td>'+pill(o.situacao)+'</td><td>'+esc(o.obs||"")+'</td></tr>'}).join("")+'</table></div>':'<p class="mut">Nenhum próximo contato agendado.</p>'}
 
+/* VENDAS */
+function addVenda(){
+  var cli=document.getElementById("vCli").value.trim();if(!cli)return alert("Informe o cliente.");
+  var o={data:document.getElementById("vData").value||hoje(),cliente:cli,cnpj:document.getElementById("vDoc").value.trim(),
+    valor:parseVal(document.getElementById("vValor").value),vendedor:document.getElementById("vVend").value.trim()||CUR,
+    obs:document.getElementById("vObs").value.trim(),criadoEm:Date.now()};
+  o.__id="vd-"+Date.now()+"-"+Math.floor(Math.random()*1000);
+  db.collection(VCOL).doc(o.__id).set(o).then(function(){toast("Venda salva ✓")}).catch(function(e){alert("Erro: "+e.message)});
+  document.getElementById("vCli").value="";document.getElementById("vDoc").value="";document.getElementById("vValor").value="";document.getElementById("vObs").value="";
+}
+function excluirV(id){if(!confirm("Excluir esta venda?"))return;db.collection(VCOL).doc(id).delete().then(function(){toast("Excluída")})}
+function renderVendas(){
+  var arr=V.slice().sort(function(a,b){return(b.data||"").localeCompare(a.data||"")});
+  var tot=arr.reduce(function(s,x){return s+(Number(x.valor)||0)},0);
+  var prosp={};C.forEach(function(o){var k=docdig(o.cnpj);if(k)prosp[k]=1});
+  var html='<div class="mut" style="margin-bottom:6px">Total: <b>'+moeda(tot)+'</b> · '+arr.length+' vendas</div><div style="overflow-x:auto"><table><tr><th>Data</th><th>Cliente</th><th>Valor</th><th>Vendedor</th><th>Produto/Obs</th><th>Prospectado?</th><th></th></tr>'+
+    arr.map(function(o){var pr=docdig(o.cnpj)&&prosp[docdig(o.cnpj)]?'<span class="pill" style="background:#dcfce7;color:#15803d">sim</span>':'—';
+      return '<tr><td>'+br(o.data)+'</td><td><b>'+esc(o.cliente)+'</b>'+(o.cnpj?'<br><span class="mut">'+esc(o.cnpj)+'</span>':'')+'</td><td>'+moeda(o.valor)+'</td><td>'+esc(o.vendedor||"")+'</td><td>'+esc(o.obs||"")+'</td><td>'+pr+'</td><td><button class="del" onclick="excluirV(\''+o.__id+'\')">×</button></td></tr>'}).join("")+'</table></div>';
+  document.getElementById("vList").innerHTML=arr.length?html:'<p class="mut">Nenhuma venda cadastrada ainda.</p>'}
+
+/* HISTORICO */
+function periodoRange(){var p=document.getElementById("hPer").value;document.getElementById("hCustom").style.display=p==="custom"?"block":"none";
+  if(p==="dia")return[hoje(),hoje()];if(p==="semana")return[inicioSemana(),hoje()];if(p==="mes")return[inicioMes(),hoje()];
+  if(p==="custom")return[document.getElementById("hDe").value||"0000",document.getElementById("hAte").value||"9999"];return["0000","9999"]}
+function renderHist(){
+  var vend=document.getElementById("hVend").value;var r=periodoRange();
+  var arr=C.filter(function(o){return(!vend||o.vendedor===vend)&&(o.data||"")>=r[0]&&(o.data||"")<=r[1]}).sort(function(a,b){return(b.data||"").localeCompare(a.data||"")||(b.criadoEm||0)-(a.criadoEm||0)});
+  var vd=V.filter(function(o){return(!vend||o.vendedor===vend)&&(o.data||"")>=r[0]&&(o.data||"")<=r[1]});
+  var clid={};arr.forEach(function(o){clid[chave(o)]=1});
+  var ret=arr.filter(function(o){return o.retorno==="sim"}).length;
+  var recv=vd.reduce(function(s,x){return s+(Number(x.valor)||0)},0);
+  document.getElementById("histKpis").innerHTML=
+    '<div class="kpi"><b>'+arr.length+'</b><span>contatos</span></div>'+
+    '<div class="kpi"><b>'+Object.keys(clid).length+'</b><span>clientes tocados</span></div>'+
+    '<div class="kpi"><b>'+(arr.length?Math.round(100*ret/arr.length):0)+'%</b><span>com retorno</span></div>'+
+    '<div class="kpi"><b>'+vd.length+'</b><span>vendas ('+moeda(recv)+')</span></div>';
+  document.getElementById("histList").innerHTML=arr.length?'<div style="overflow-x:auto">'+tabela(arr)+'</div>':'<p class="mut">Nenhum contato no período/filtro.</p>'}
+
 function renderDir(){
   var total=C.length,comRet=C.filter(function(o){return o.retorno==="sim"}).length;
   var grpC={};C.forEach(function(o){var k=chave(o);(grpC[k]=grpC[k]||[]).push(o)});
-  var clientes=Object.keys(grpC).length;
-  var compraram=Object.keys(grpC).filter(function(k){return grpC[k].some(function(x){return x.situacao==="Comprou"})}).length;
+  var salesByDoc={};V.forEach(function(s){var k=docdig(s.cnpj);if(!k)return;(salesByDoc[k]=salesByDoc[k]||[]).push(s)});
+  function convInfo(k,arr){
+    var d1=arr.map(function(x){return x.data}).filter(Boolean).sort()[0];
+    var cd=docdig(arr.map(function(x){return x.cnpj}).filter(Boolean)[0]||"");
+    var saleDate=null,saleVal=0;
+    if(cd&&salesByDoc[cd]){var sv=salesByDoc[cd].filter(function(s){return(s.data||"")>=(d1||"0000")}).sort(function(a,b){return(a.data||"").localeCompare(b.data||"")});
+      if(sv.length){saleDate=sv[0].data;saleVal=Number(sv[0].valor)||0}}
+    var comp=arr.filter(function(x){return x.situacao==="Comprou"}).map(function(x){return x.data}).filter(Boolean).sort()[0]||null;
+    var cDate=[saleDate,comp].filter(Boolean).sort()[0]||null;
+    return {d1:d1,convDate:cDate,valor:saleVal,converted:!!cDate}}
+  var clientes=Object.keys(grpC).length,compraram=0,receita=0;
+  Object.keys(grpC).forEach(function(k){var ci=convInfo(k,grpC[k]);if(ci.converted){compraram++;receita+=ci.valor}});
   var conv=clientes?Math.round(100*compraram/clientes):0;
   document.getElementById("kpis").innerHTML=
-    '<div class="kpi"><b>'+total+'</b><span>contatos registrados</span></div>'+
     '<div class="kpi"><b>'+clientes+'</b><span>clientes prospectados</span></div>'+
-    '<div class="kpi"><b>'+compraram+'</b><span>já compraram ('+conv+'%)</span></div>'+
+    '<div class="kpi"><b>'+compraram+'</b><span>converteram ('+conv+'%)</span></div>'+
+    '<div class="kpi"><b>'+moeda(receita)+'</b><span>receita atribuída</span></div>'+
     '<div class="kpi"><b>'+(total?Math.round(100*comRet/total):0)+'%</b><span>contatos com retorno</span></div>';
-  // por vendedor
-  var v={};C.forEach(function(o){var n=o.vendedor||"—";var x=v[n]=v[n]||{ct:0,ret:0,cli:{},comp:{}};x.ct++;if(o.retorno==="sim")x.ret++;var k=chave(o);x.cli[k]=1;if(o.situacao==="Comprou")x.comp[k]=1});
-  var rows=Object.keys(v).sort(function(a,b){return v[b].ct-v[a].ct}).map(function(n){var x=v[n];var nc=Object.keys(x.cli).length,ncp=Object.keys(x.comp).length;
+  var v={};C.forEach(function(o){var n=o.vendedor||"—";var x=v[n]=v[n]||{ct:0,ret:0,cli:{}};x.ct++;if(o.retorno==="sim")x.ret++;x.cli[chave(o)]=1});
+  var rows=Object.keys(v).sort(function(a,b){return v[b].ct-v[a].ct}).map(function(n){var x=v[n];var nc=Object.keys(x.cli).length;
+    var ncp=Object.keys(x.cli).filter(function(k){return grpC[k]&&convInfo(k,grpC[k]).converted}).length;
     return '<tr><td><b>'+esc(n)+'</b></td><td>'+x.ct+'</td><td>'+Math.round(100*x.ret/x.ct)+'%</td><td>'+nc+'</td><td>'+ncp+'</td><td>'+(nc?Math.round(100*ncp/nc):0)+'%</td></tr>'});
-  document.getElementById("tblVend").innerHTML='<tr><th>Vendedor</th><th>Contatos</th><th>% retorno</th><th>Clientes</th><th>Compraram</th><th>Conversão</th></tr>'+rows.join("");
-  // tempo até 1a compra
-  var convRows=[];Object.keys(grpC).forEach(function(k){var arr=grpC[k];var comp=arr.filter(function(x){return x.situacao==="Comprou"});if(!comp.length)return;
-    var d1=arr.map(function(x){return x.data}).filter(Boolean).sort()[0];var dc=comp.map(function(x){return x.data}).filter(Boolean).sort()[0];
-    var dias=Math.round((new Date(dc)-new Date(d1))/86400000);var ult=arr[arr.length-1];
-    convRows.push({nome:ult.cliente,vend:ult.vendedor,d1:d1,dc:dc,dias:isNaN(dias)?"—":dias})});
+  document.getElementById("tblVend").innerHTML='<tr><th>Vendedor</th><th>Contatos</th><th>% retorno</th><th>Clientes</th><th>Converteram</th><th>Conversão</th></tr>'+rows.join("");
+  var convRows=[];Object.keys(grpC).forEach(function(k){var arr=grpC[k];var ci=convInfo(k,arr);if(!ci.converted)return;
+    var dias=Math.round((new Date(ci.convDate)-new Date(ci.d1))/86400000);var ult=arr[arr.length-1];
+    convRows.push({nome:ult.cliente,vend:ult.vendedor,d1:ci.d1,dc:ci.convDate,valor:ci.valor,dias:isNaN(dias)?"—":dias})});
   convRows.sort(function(a,b){return(a.dc||"").localeCompare(b.dc||"")});
-  var med=convRows.filter(function(x){return typeof x.dias==="number"});med=med.length?Math.round(med.reduce(function(s,x){return s+x.dias},0)/med.length):null;
-  document.getElementById("tblConv").innerHTML='<tr><th>Cliente</th><th>Vendedor</th><th>1º contato</th><th>1ª compra</th><th>Dias</th></tr>'+
-    (convRows.length?convRows.map(function(x){return '<tr><td><b>'+esc(x.nome)+'</b></td><td>'+esc(x.vend)+'</td><td>'+br(x.d1)+'</td><td>'+br(x.dc)+'</td><td><b>'+x.dias+'</b></td></tr>'}).join("")+
-      '<tr><td colspan="4" style="text-align:right"><b>Tempo médio até a 1ª compra</b></td><td><b>'+(med!=null?med+" dias":"—")+'</b></td></tr>'
-     :'<tr><td colspan="5" class="mut">Nenhuma compra marcada ainda.</td></tr>')}
+  var medArr=convRows.filter(function(x){return typeof x.dias==="number"});var med=medArr.length?Math.round(medArr.reduce(function(s,x){return s+x.dias},0)/medArr.length):null;
+  document.getElementById("tblConv").innerHTML='<tr><th>Cliente</th><th>Vendedor</th><th>1º contato</th><th>1ª compra</th><th>Dias</th><th>Valor</th></tr>'+
+    (convRows.length?convRows.map(function(x){return '<tr><td><b>'+esc(x.nome)+'</b></td><td>'+esc(x.vend)+'</td><td>'+br(x.d1)+'</td><td>'+br(x.dc)+'</td><td><b>'+x.dias+'</b></td><td>'+(x.valor?moeda(x.valor):'—')+'</td></tr>'}).join("")+
+      '<tr><td colspan="4" style="text-align:right"><b>Tempo médio até a 1ª compra</b></td><td><b>'+(med!=null?med+" dias":"—")+'</b></td><td></td></tr>'
+     :'<tr><td colspan="6" class="mut">Nenhuma conversão ainda (marque situação "Comprou" ou cadastre uma venda com o CNPJ).</td></tr>')}
 
 window.addEventListener("load",function(){
   document.getElementById("cData").value=hoje();
+  var vd=document.getElementById("vData");if(vd)vd.value=hoje();
   try{CUR=localStorage.getItem("pecas_user")||""}catch(e){}
   firebase.initializeApp(FB);auth=firebase.auth();db=firebase.firestore();
   auth.onAuthStateChanged(function(u){if(u){UID=u.uid;document.getElementById("ov").style.display="none";setUser(CUR);start()}else{document.getElementById("ov").style.display="flex"}})});
