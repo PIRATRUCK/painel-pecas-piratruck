@@ -102,7 +102,9 @@
       <div class="row3">
         <div><label>Data</label><input type="date" id="cData"></div>
         <div><label>Cliente</label><input id="cCli" placeholder="nome da empresa/pessoa"></div>
-        <div><label>CNPJ/CPF <span class="mut">(p/ cruzar venda)</span></label><input id="cDoc" placeholder="só números"></div>
+        <div><label>CNPJ/CPF <span class="mut">(p/ cruzar venda)</span></label>
+          <div style="display:flex;gap:6px"><input id="cDoc" placeholder="00.000.000/0000-00" inputmode="numeric" maxlength="18" style="flex:1"><button type="button" id="cCnpjBt" class="btn btn-c btn-sm" onclick="buscaCNPJ('cDoc','cCli','cCnpjSt','cCnpjBt')">🔍 Buscar</button></div>
+          <span class="mut" id="cCnpjSt" style="font-size:11px"></span></div>
       </div>
       <div class="row3">
         <div><label>Meio de contato</label><select id="cMeio">
@@ -162,7 +164,9 @@
       <div class="row3">
         <div><label>Data da venda</label><input type="date" id="vData"></div>
         <div><label>Cliente</label><input id="vCli" placeholder="nome"></div>
-        <div><label>CNPJ/CPF <span class="mut">(casa c/ prospecção)</span></label><input id="vDoc" placeholder="só números"></div>
+        <div><label>CNPJ/CPF <span class="mut">(casa c/ prospecção)</span></label>
+          <div style="display:flex;gap:6px"><input id="vDoc" placeholder="00.000.000/0000-00" inputmode="numeric" maxlength="18" style="flex:1"><button type="button" id="vCnpjBt" class="btn btn-c btn-sm" onclick="buscaCNPJ('vDoc','vCli','vCnpjSt','vCnpjBt')">🔍 Buscar</button></div>
+          <span class="mut" id="vCnpjSt" style="font-size:11px"></span></div>
       </div>
       <div class="row3">
         <div><label>Valor (R$)</label><input id="vValor" inputmode="decimal" placeholder="0,00"></div>
@@ -356,9 +360,47 @@ function renderDir(){
       '<tr><td colspan="4" style="text-align:right"><b>Tempo médio até a 1ª compra</b></td><td><b>'+(med!=null?med+" dias":"—")+'</b></td><td></td></tr>'
      :'<tr><td colspan="6" class="mut">Nenhuma conversão ainda (marque situação "Comprou" ou cadastre uma venda com o CNPJ).</td></tr>')}
 
+/* ===== Consulta de CNPJ (BrasilAPI) — preenche o nome do cliente ===== */
+var CNPJ_API="https://brasilapi.com.br/api/cnpj/v1/";
+function soDig(v){return (v==null?"":""+v).replace(/\D/g,"");}
+function mascCNPJ(v){var d=soDig(v).slice(0,14);
+  if(d.length<=11) return d.replace(/^(\d{3})(\d)/,"$1.$2").replace(/^(\d{3})\.(\d{3})(\d)/,"$1.$2.$3").replace(/\.(\d{3})(\d)/,".$1-$2");
+  return d.replace(/^(\d{2})(\d)/,"$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/,"$1.$2.$3").replace(/\.(\d{3})(\d)/,".$1/$2").replace(/(\d{4})(\d)/,"$1-$2");}
+function cnpjOk(c){if(c.length!==14||/^(\d)\1+$/.test(c))return false;
+  var calc=function(b,p){var s=0;for(var i=0;i<b.length;i++)s+=(+b[i])*p[i];var r=s%11;return r<2?0:11-r;};
+  return (+c[12])===calc(c.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])&&(+c[13])===calc(c.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2]);}
+var cnpjLast={};
+function cnpjMsg(id,txt,cor){var st=document.getElementById(id);if(st){st.textContent=txt;st.style.color=cor||"#64748b";}}
+async function buscaCNPJ(docId,nomeId,statusId,btnId){
+  var doc=document.getElementById(docId),nome=document.getElementById(nomeId),btn=btnId&&document.getElementById(btnId);
+  var c=soDig(doc.value);
+  if(c.length===11){cnpjMsg(statusId,"CPF — busca automática só para CNPJ.");return;}
+  if(!cnpjOk(c)){cnpjMsg(statusId,"CNPJ inválido — confira os dígitos.","#b91c1c");return;}
+  if(btn)btn.disabled=true;cnpjMsg(statusId,"Consultando Receita…");
+  try{
+    var ctrl=new AbortController(),t=setTimeout(function(){ctrl.abort();},12000);
+    var r=await fetch(CNPJ_API+c,{signal:ctrl.signal});clearTimeout(t);
+    if(!r.ok)throw new Error(r.status===404?"CNPJ não encontrado.":(r.status===429?"Muitas consultas — aguarde.":"Falha ("+r.status+")."));
+    var d=await r.json();
+    var razao=d.razao_social||d.nome_fantasia||"";
+    if(nome&&razao&&(!nome.value||nome.dataset.cnpjfill==="1")){nome.value=razao;nome.dataset.cnpjfill="1";}
+    cnpjLast[docId]=c;
+    var sit=(d.descricao_situacao_cadastral||"").toUpperCase();
+    cnpjMsg(statusId,(sit==="ATIVA"?"✓ ":"⚠ ")+razao+(sit?" · "+sit:"")+(d.municipio?" · "+d.municipio+"/"+d.uf:""),sit==="ATIVA"?"#15803d":"#b45309");
+  }catch(e){cnpjMsg(statusId,e.name==="AbortError"?"Demorou demais — tente de novo.":(e.message||"Erro na consulta."),"#b91c1c");}
+  finally{if(btn)btn.disabled=false;}
+}
+function wireCNPJ(docId,nomeId,statusId,btnId){
+  var doc=document.getElementById(docId);if(!doc)return;
+  doc.addEventListener("input",function(){doc.value=mascCNPJ(doc.value);var c=soDig(doc.value);
+    if(c.length===14&&c!==cnpjLast[docId])buscaCNPJ(docId,nomeId,statusId,btnId);});
+  doc.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();buscaCNPJ(docId,nomeId,statusId,btnId);}});
+}
 window.addEventListener("load",function(){
   document.getElementById("cData").value=hoje();
   var vd=document.getElementById("vData");if(vd)vd.value=hoje();
+  wireCNPJ("cDoc","cCli","cCnpjSt","cCnpjBt");
+  wireCNPJ("vDoc","vCli","vCnpjSt","vCnpjBt");
   try{CUR=localStorage.getItem("pecas_user")||""}catch(e){}
   firebase.initializeApp(FB);auth=firebase.auth();db=firebase.firestore();
   auth.onAuthStateChanged(function(u){if(u){UID=u.uid;document.getElementById("ov").style.display="none";setUser(CUR);start()}else{document.getElementById("ov").style.display="flex"}})});
