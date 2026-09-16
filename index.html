@@ -86,7 +86,14 @@
   <div id="tab-cli" style="display:none">
     <section>
       <h2>👤 Clientes prospectados</h2>
-      <input id="busca" placeholder="🔎 buscar cliente, CNPJ ou vendedor..." oninput="renderCli()" style="margin-bottom:10px">
+      <div class="row" style="margin-bottom:8px">
+        <input id="busca" placeholder="🔎 buscar cliente, CNPJ ou vendedor..." oninput="renderCli()">
+        <select id="fSit" onchange="renderCli()">
+          <option value="">Todas as situações</option>
+          <option>Prospectado</option><option>Em conversa</option><option>Cotou</option><option>Comprou</option><option>Sem interesse</option>
+        </select>
+      </div>
+      <div id="sitResumo" style="margin-bottom:10px"></div>
       <div id="cliList"></div>
     </section>
   </div>
@@ -208,16 +215,24 @@ function tabela(arr){return '<table><tr><th>Data</th><th>Cliente</th><th>Vendedo
 function renderHoje(){var h=hoje();var arr=C.filter(function(o){return o.data===h}).sort(function(a,b){return(b.criadoEm||0)-(a.criadoEm||0)});
   document.getElementById("hojeList").innerHTML=arr.length?'<div style="overflow-x:auto">'+tabela(arr)+'</div>':'<p class="mut">Nenhum contato lançado hoje.</p>'}
 
+function setSit(s){var el=document.getElementById("fSit");if(el)el.value=s;renderCli();}
 function renderCli(){
   var q=(document.getElementById("busca").value||"").toLowerCase();
+  var fs=(document.getElementById("fSit")||{}).value||"";
   var grp={};C.forEach(function(o){var k=chave(o);(grp[k]=grp[k]||[]).push(o)});
-  var linhas=Object.keys(grp).map(function(k){var arr=grp[k].sort(function(a,b){return(a.data||"").localeCompare(b.data||"")});
+  var base=Object.keys(grp).map(function(k){var arr=grp[k].sort(function(a,b){return(a.data||"").localeCompare(b.data||"")});
     var ult=arr[arr.length-1];var nome=ult.cliente,cnpj=ult.cnpj||"";var vend=[].concat.apply([],arr.map(function(x){return x.vendedor})).filter(function(v,i,s){return v&&s.indexOf(v)===i});
     var comprou=arr.some(function(x){return x.situacao==="Comprou"});
     return {nome:nome,cnpj:cnpj,vend:vend.join(", "),n:arr.length,sit:ult.situacao,prox:ult.proximo,comprou:comprou,
-      txt:(nome+" "+cnpj+" "+vend.join(" ")).toLowerCase()}})
-    .filter(function(x){return !q||x.txt.indexOf(q)>=0})
-    .sort(function(a,b){return b.n-a.n});
+      txt:(nome+" "+cnpj+" "+vend.join(" ")).toLowerCase()}});
+  /* resumo por situação (clicável p/ filtrar) */
+  var cnt={};base.forEach(function(x){cnt[x.sit]=(cnt[x.sit]||0)+1});
+  var ordem=["Prospectado","Em conversa","Cotou","Comprou","Sem interesse"];
+  var resumo='<div style="display:flex;flex-wrap:wrap;gap:6px">'+
+    '<span class="pill" style="cursor:pointer;background:'+(fs===""?"#0d0d0d":"#e5e7eb")+';color:'+(fs===""?"#ffc20e":"#334155")+'" onclick="setSit(\'\')">Todos ('+base.length+')</span>'+
+    ordem.filter(function(s){return cnt[s]}).map(function(s){var on=fs===s;return '<span class="pill" style="cursor:pointer;background:'+((SITCOR[s]||"#64748b")+(on?"":"22"))+';color:'+(on?"#fff":(SITCOR[s]||"#64748b"))+'" onclick="setSit(\''+s+'\')">'+esc(s)+' ('+cnt[s]+')</span>'}).join("")+'</div>';
+  var sr=document.getElementById("sitResumo");if(sr)sr.innerHTML=resumo;
+  var linhas=base.filter(function(x){return(!q||x.txt.indexOf(q)>=0)&&(!fs||x.sit===fs)}).sort(function(a,b){return b.n-a.n});
   var html='<table><tr><th>Cliente</th><th>Vendedor(es)</th><th>Contatos</th><th>Situação</th><th>Próximo</th></tr>'+
     linhas.map(function(x){return '<tr><td><b>'+esc(x.nome)+'</b>'+(x.cnpj?'<br><span class="mut">'+esc(x.cnpj)+'</span>':'')+(x.comprou?' 🏆':'')+'</td><td>'+esc(x.vend)+'</td><td>'+x.n+'</td><td>'+pill(x.sit)+'</td><td>'+(x.prox?br(x.prox):'—')+'</td></tr>'}).join("")+'</table>';
   document.getElementById("cliList").innerHTML=linhas.length?'<div style="overflow-x:auto">'+html+'</div>':'<p class="mut">Nada encontrado.</p>'}
