@@ -106,6 +106,9 @@
           <div style="display:flex;gap:6px"><input id="cDoc" placeholder="00.000.000/0000-00" inputmode="numeric" maxlength="18" style="flex:1"><button type="button" id="cCnpjBt" class="btn btn-c btn-sm" onclick="buscaCNPJ('cDoc','cCli','cCnpjSt','cCnpjBt')">🔍 Buscar</button></div>
           <span class="mut" id="cCnpjSt" style="font-size:11px"></span></div>
       </div>
+      <div class="row">
+        <div><label>Celular do cliente <span class="mut">(obrigatório)</span></label><input id="cCel" placeholder="(00) 00000-0000" inputmode="tel" maxlength="16" required></div>
+      </div>
       <div class="row3">
         <div><label>Meio de contato</label><select id="cMeio">
           <option>WhatsApp</option><option>Telefone</option><option>Visita</option><option>E-mail</option><option>Balcão</option><option>Outro</option></select></div>
@@ -242,18 +245,20 @@ function setUser(n){CUR=n||"";try{localStorage.setItem("pecas_user",CUR)}catch(e
 function addContato(){
   if(!CUR)return alert("Selecione seu nome no topo.");
   var cli=document.getElementById("cCli").value.trim();if(!cli)return alert("Informe o cliente.");
+  var cel=document.getElementById("cCel").value.trim();if(!cel)return alert("Informe o celular do cliente.");
+  if(soDig(cel).length<10)return alert("Celular inválido — informe DDD + número.");
   var o={vendedor:CUR,data:document.getElementById("cData").value||hoje(),cliente:cli,cnpj:document.getElementById("cDoc").value.trim(),
-    meio:document.getElementById("cMeio").value,retorno:document.getElementById("cRet").value,situacao:document.getElementById("cSit").value,
+    celular:cel,meio:document.getElementById("cMeio").value,retorno:document.getElementById("cRet").value,situacao:document.getElementById("cSit").value,
     proximo:document.getElementById("cProx").value,obs:document.getElementById("cObs").value.trim(),criadoEm:Date.now()};
   o.__id="ct-"+Date.now()+"-"+Math.floor(Math.random()*1000);
   db.collection(COL).doc(o.__id).set(o).then(function(){toast("Contato salvo ✓")}).catch(function(e){alert("Erro: "+e.message)});
-  document.getElementById("cCli").value="";document.getElementById("cDoc").value="";document.getElementById("cObs").value="";document.getElementById("cProx").value="";
+  document.getElementById("cCli").value="";document.getElementById("cDoc").value="";document.getElementById("cCel").value="";document.getElementById("cObs").value="";document.getElementById("cProx").value="";
 }
 function excluir(id){if(!confirm("Excluir este registro?"))return;db.collection(COL).doc(id).delete().then(function(){toast("Excluído")})}
 
 function renderAll(){var t=document.querySelector(".tab.on");renderHoje();if(t){var k=t.dataset.t;if(k==="cli")renderCli();if(k==="prox")renderProx();if(k==="hist")renderHist();if(k==="vendas")renderVendas();if(k==="dir")renderDir()}}
-function linha(o){return '<tr><td>'+br(o.data)+'</td><td><b>'+esc(o.cliente)+'</b>'+(o.cnpj?'<br><span class="mut">'+esc(o.cnpj)+'</span>':'')+'</td><td>'+esc(o.vendedor)+'</td><td>'+esc(o.meio)+'</td><td>'+(o.retorno==="sim"?"✅":o.retorno==="nao"?"❌":"—")+'</td><td>'+pill(o.situacao)+'</td><td>'+(o.proximo?br(o.proximo):'—')+'</td><td>'+esc(o.obs||"")+'</td><td><button class="del" onclick="excluir(\''+o.__id+'\')">×</button></td></tr>'}
-function tabela(arr){return '<table><tr><th>Data</th><th>Cliente</th><th>Vendedor</th><th>Meio</th><th>Ret.</th><th>Situação</th><th>Próximo</th><th>Obs</th><th></th></tr>'+arr.map(linha).join("")+'</table>'}
+function linha(o){return '<tr><td>'+br(o.data)+'</td><td><b>'+esc(o.cliente)+'</b>'+(o.cnpj?'<br><span class="mut">'+esc(o.cnpj)+'</span>':'')+'</td><td>'+esc(o.celular||"—")+'</td><td>'+esc(o.vendedor)+'</td><td>'+esc(o.meio)+'</td><td>'+(o.retorno==="sim"?"✅":o.retorno==="nao"?"❌":"—")+'</td><td>'+pill(o.situacao)+'</td><td>'+(o.proximo?br(o.proximo):'—')+'</td><td>'+esc(o.obs||"")+'</td><td><button class="del" onclick="excluir(\''+o.__id+'\')">×</button></td></tr>'}
+function tabela(arr){return '<table><tr><th>Data</th><th>Cliente</th><th>Celular</th><th>Vendedor</th><th>Meio</th><th>Ret.</th><th>Situação</th><th>Próximo</th><th>Obs</th><th></th></tr>'+arr.map(linha).join("")+'</table>'}
 function renderHoje(){var h=hoje();var arr=C.filter(function(o){return o.data===h}).sort(function(a,b){return(b.criadoEm||0)-(a.criadoEm||0)});
   document.getElementById("hojeList").innerHTML=arr.length?'<div style="overflow-x:auto">'+tabela(arr)+'</div>':'<p class="mut">Nenhum contato lançado hoje.</p>'}
 
@@ -263,10 +268,10 @@ function renderCli(){
   var fs=(document.getElementById("fSit")||{}).value||"";
   var grp={};C.forEach(function(o){var k=chave(o);(grp[k]=grp[k]||[]).push(o)});
   var base=Object.keys(grp).map(function(k){var arr=grp[k].sort(function(a,b){return(a.data||"").localeCompare(b.data||"")});
-    var ult=arr[arr.length-1];var nome=ult.cliente,cnpj=ult.cnpj||"";var vend=[].concat.apply([],arr.map(function(x){return x.vendedor})).filter(function(v,i,s){return v&&s.indexOf(v)===i});
+    var ult=arr[arr.length-1];var nome=ult.cliente,cnpj=ult.cnpj||"",cel=ult.celular||"";var vend=[].concat.apply([],arr.map(function(x){return x.vendedor})).filter(function(v,i,s){return v&&s.indexOf(v)===i});
     var comprou=arr.some(function(x){return x.situacao==="Comprou"});
-    return {nome:nome,cnpj:cnpj,vend:vend.join(", "),n:arr.length,sit:ult.situacao,prox:ult.proximo,comprou:comprou,
-      txt:(nome+" "+cnpj+" "+vend.join(" ")).toLowerCase()}});
+    return {nome:nome,cnpj:cnpj,cel:cel,vend:vend.join(", "),n:arr.length,sit:ult.situacao,prox:ult.proximo,comprou:comprou,
+      txt:(nome+" "+cnpj+" "+cel+" "+vend.join(" ")).toLowerCase()}});
   /* resumo por situação (clicável p/ filtrar) */
   var cnt={};base.forEach(function(x){cnt[x.sit]=(cnt[x.sit]||0)+1});
   var ordem=["Prospectado","Em conversa","Cotou","Comprou","Sem interesse"];
@@ -275,8 +280,8 @@ function renderCli(){
     ordem.filter(function(s){return cnt[s]}).map(function(s){var on=fs===s;return '<span class="pill" style="cursor:pointer;background:'+((SITCOR[s]||"#64748b")+(on?"":"22"))+';color:'+(on?"#fff":(SITCOR[s]||"#64748b"))+'" onclick="setSit(\''+s+'\')">'+esc(s)+' ('+cnt[s]+')</span>'}).join("")+'</div>';
   var sr=document.getElementById("sitResumo");if(sr)sr.innerHTML=resumo;
   var linhas=base.filter(function(x){return(!q||x.txt.indexOf(q)>=0)&&(!fs||x.sit===fs)}).sort(function(a,b){return b.n-a.n});
-  var html='<table><tr><th>Cliente</th><th>Vendedor(es)</th><th>Contatos</th><th>Situação</th><th>Próximo</th></tr>'+
-    linhas.map(function(x){return '<tr><td><b>'+esc(x.nome)+'</b>'+(x.cnpj?'<br><span class="mut">'+esc(x.cnpj)+'</span>':'')+(x.comprou?' 🏆':'')+'</td><td>'+esc(x.vend)+'</td><td>'+x.n+'</td><td>'+pill(x.sit)+'</td><td>'+(x.prox?br(x.prox):'—')+'</td></tr>'}).join("")+'</table>';
+  var html='<table><tr><th>Cliente</th><th>Celular</th><th>Vendedor(es)</th><th>Contatos</th><th>Situação</th><th>Próximo</th></tr>'+
+    linhas.map(function(x){return '<tr><td><b>'+esc(x.nome)+'</b>'+(x.cnpj?'<br><span class="mut">'+esc(x.cnpj)+'</span>':'')+(x.comprou?' 🏆':'')+'</td><td>'+esc(x.cel||"—")+'</td><td>'+esc(x.vend)+'</td><td>'+x.n+'</td><td>'+pill(x.sit)+'</td><td>'+(x.prox?br(x.prox):'—')+'</td></tr>'}).join("")+'</table>';
   document.getElementById("cliList").innerHTML=linhas.length?'<div style="overflow-x:auto">'+html+'</div>':'<p class="mut">Nada encontrado.</p>'}
 
 function renderProx(){var h=hoje();
@@ -369,6 +374,9 @@ function mascCNPJ(v){var d=soDig(v).slice(0,14);
 function cnpjOk(c){if(c.length!==14||/^(\d)\1+$/.test(c))return false;
   var calc=function(b,p){var s=0;for(var i=0;i<b.length;i++)s+=(+b[i])*p[i];var r=s%11;return r<2?0:11-r;};
   return (+c[12])===calc(c.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])&&(+c[13])===calc(c.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2]);}
+function mascTel(v){var d=soDig(v).slice(0,11);
+  if(d.length<=10)return d.replace(/^(\d{2})(\d)/,"($1) $2").replace(/(\d{4})(\d)$/,"$1-$2");
+  return d.replace(/^(\d{2})(\d)/,"($1) $2").replace(/(\d{5})(\d)$/,"$1-$2");}
 var cnpjLast={};
 function cnpjMsg(id,txt,cor){var st=document.getElementById(id);if(st){st.textContent=txt;st.style.color=cor||"#64748b";}}
 async function buscaCNPJ(docId,nomeId,statusId,btnId){
@@ -401,6 +409,7 @@ window.addEventListener("load",function(){
   var vd=document.getElementById("vData");if(vd)vd.value=hoje();
   wireCNPJ("cDoc","cCli","cCnpjSt","cCnpjBt");
   wireCNPJ("vDoc","vCli","vCnpjSt","vCnpjBt");
+  var cEl=document.getElementById("cCel");if(cEl)cEl.addEventListener("input",function(){cEl.value=mascTel(cEl.value);});
   try{CUR=localStorage.getItem("pecas_user")||""}catch(e){}
   firebase.initializeApp(FB);auth=firebase.auth();db=firebase.firestore();
   auth.onAuthStateChanged(function(u){if(u){UID=u.uid;document.getElementById("ov").style.display="none";setUser(CUR);start()}else{document.getElementById("ov").style.display="flex"}})});
